@@ -7,9 +7,9 @@ Package.describe({
 });
 
 Package.onUse(function(api) {
-  api.versionsFrom('2.5');
-  api.use('mongo@2.0.0-rc300.2');
+  api.versionsFrom('3.0-rc.0');
+  api.use('mongo');
   api.use('ecmascript');
-  api.use('promise@1.0.0-rc300.1');
+  api.use('promise');
   api.mainModule('aggregate.js', 'server');
 });

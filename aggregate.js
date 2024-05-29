@@ -1,8 +1,7 @@
 let _errorsDisplayedOnce = false;
-export const ReactiveAggregate = (sub, collection = null, pipeline = [], options = {}) => {
+export const ReactiveAggregate = async (sub, collection = null, pipeline = [], options = {}) => {
   import { Meteor } from 'meteor/meteor';
   import { Mongo } from 'meteor/mongo';
-  import { Promise } from 'meteor/promise';
 
   // Define new Meteor Error type
   const TunguskaReactiveAggregateError = Meteor.makeErrorType('tunguska:reactive-aggregate', function (msg) {
@@ -183,13 +182,13 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
     // and the second time from that to a POJO with the id being a Uint8Array.
     else if (valueToRepair && (typeof valueToRepair === 'object') && (valueToRepair.id instanceof Uint8Array))
       set(doc, key, new Mongo.ObjectID(Buffer.from(valueToRepair.id).toString("hex")));
-  }
+  };
 
-  const update = () => {
+  const update = async () => {
     // add and update documents on the client
     try {
-      if (localOptions.debug) console.log(`Reactive-Aggregate: Running aggregation pipeline`)
-      const docs = Promise.await(collection.rawCollection().aggregate(pipeline, localOptions.aggregationOptions).toArray());
+      if (localOptions.debug) console.log(`Reactive-Aggregate: Running aggregation pipeline`);
+      const docs = await (collection.rawCollection().aggregate(pipeline, localOptions.aggregationOptions).toArray());
       docs.forEach(doc => {
 
         /*  _ids are complicated:
@@ -278,7 +277,7 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
         }
       });
       sub._iteration++;
-      if (localOptions.debug) console.log(`Reactive-Aggregate: publish: ready`)
+      if (localOptions.debug) console.log(`Reactive-Aggregate: publish: ready`);
       if (localOptions.capturePipeline) {
         localOptions.capturePipeline(docs);
       }
@@ -286,14 +285,14 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
     } catch (err) {
       throw new TunguskaReactiveAggregateError(err.message);
     }
-  }
+  };
 
   let currentDebounceCount = 0;
   let timer;
 
   const debounce = (notification) => {
     if (initializing) return;
-    if (localOptions.debug) console.log(`Reactive-Aggregate: collection ${notification.name}: publish: ${notification.mutation}, _id: ${notification.id}`)
+    if (localOptions.debug) console.log(`Reactive-Aggregate: collection ${notification.name}: publish: ${notification.mutation}, _id: ${notification.id}`);
 
     if (!timer && localOptions.debounceDelay > 0) timer = Meteor.setTimeout(() => {
       update();
@@ -308,7 +307,7 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
       timer = undefined;
       currentDebounceCount = 0;
     }
-  }
+  };
 
   if (!localOptions.noAutomaticObserver) {
     const cursor = collection.find(localOptions.observeSelector, localOptions.observeOptions);
@@ -319,7 +318,7 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
   // Track any changes on the observed cursors.
   localOptions.observers.forEach(cursor => {
     const name = cursor._cursorDescription.collectionName;
-    if (localOptions.debug) console.log(`Reactive-Aggregate: collection ${name}: initialise observers`)
+    if (localOptions.debug) console.log(`Reactive-Aggregate: collection ${name}: initialise observers`);
     handles.push(cursor.observeChanges({
       added(id) {
         debounce({ name, mutation: 'added', id });
@@ -338,16 +337,18 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
 
   // stop observing the cursors when the client unsubscribes
   sub.onStop(() => {
-    if (options.debug) console.log(`Reactive-Aggregate: stopping observers`)
+    if (options.debug) console.log(`Reactive-Aggregate: stopping observers`);
     handles.forEach(handle => {
-      handle.stop();
+      if (typeof handle.stop === 'function') {
+        handle.stop();
+      }
     });
     Meteor.clearTimeout(timer);
   });
   // End of the setup phase. We don't need to do any of that again!
 
   if (typeof localOptions.debug === 'function') {
-    const explain = Promise.await(collection.rawCollection().aggregate(pipeline, localOptions.aggregationOptions).explain());
+    const explain = await collection.rawCollection().aggregate(pipeline, localOptions.aggregationOptions).explain();
     localOptions.debug(explain);
   }
 
